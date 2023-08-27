@@ -7,6 +7,8 @@
 #ifndef ASSEMBLER_HEADER
 #define ASSEMBLER_HEADER
 
+#define MAX_INSTRUCTION_LENGTH 255
+
 int main(int argc, char **argv);
 
 #endif

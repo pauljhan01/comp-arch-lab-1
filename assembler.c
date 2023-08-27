@@ -18,9 +18,13 @@ int main(int argc, char **argv){
 		exit(4);
 	}
 
+	char *instruction = (char *)malloc(sizeof(char)*MAX_INSTRUCTION_LENGTH);
+
+	char *line = fgets(instruction, MAX_INSTRUCTION_LENGTH, infile);
 
 	fclose(infile);
 	fclose(outfile);
 	
 	return 0;
 }
+
