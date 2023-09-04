@@ -1,2 +1,4 @@
 .ORIG x3000
+REt
+rti
 .END
