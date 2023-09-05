@@ -33,7 +33,7 @@ enum pseudo_op{
 	ORIG, FILL, END
 };
 enum bool_registers{
-	DESTINATION_REGISTER, SOURCE_REGISTER, BASE_REGISTER
+	DESTINATION_REGISTER, SOURCE_REGISTER1, SOURCE_REGISTER2, BASE_REGISTER
 };
 
 //various structs, mostly related to holding the name and machine code of the registers processed from instructions
@@ -82,7 +82,7 @@ const base_register arr_base_register[] = {
 
 typedef struct{	
 	char opcode[6];
-	int machine_code;
+	unsigned short machine_code;
 	int num_registers;
 	int base_register;
 	__int16_t num_bits_offset_immediate;
@@ -130,7 +130,7 @@ void convert_to_machine(FILE *input_assembly_file, FILE *object_code);
 
 void print_bits(short machine_code);
 
-void write_to_file(FILE *output_file);
+void write_to_file(short machine_code, FILE *output_file);
 
 void add_label_to_table(char *label);
 
@@ -236,6 +236,7 @@ void convert_to_machine(FILE *input_assembly_file, FILE *object_code){
 	int operand = false;
 	char *operand_string = (char *)malloc(MAX_INSTRUCTION_LENGTH);
 	while(fgets(instruction,MAX_INSTRUCTION_LENGTH,input_assembly_file)!=NULL){
+		operand = false;
 		for(int i = 0; i < strlen(instruction); i++){
 			instruction[i] = tolower(instruction[i]);
 		}
@@ -264,23 +265,44 @@ void convert_to_machine(FILE *input_assembly_file, FILE *object_code){
 				operand_string = strcpy(operand_string, token);
 				operand = true;
 			}
+			if(is_pseudo_op(token) == true){
+				int pseudo = type_of_pseudo_op(token);
+				if(pseudo == FILL){
+					token = strtok(NULL, "\t\n ,");
+					short value = value_of_operand(token);
+					write_to_file(value, object_code);	
+				}
+				if(pseudo == ORIG){
+					write_to_file(starting_address, object_code);
+				}
+			}
 			token = strtok(NULL, "\t\n ,");
 		}
-		short machine_code = 0;
+		unsigned short machine_code = 0;
 		for(int i = 0; i < NUM_OPCODE; i++){
 			if(strcmp(opcode_string,arr_opcode[i].opcode)==0 && num_registers == arr_opcode[i].num_registers){
 				switch(num_registers){
 					case 0:
-						if(operand){
-							int value = value_of_operand(operand_string);
-							machine_code = arr_opcode[i].machine_code + value;
+						if(operand == true){
+							short value = value_of_operand(operand_string);
 						}else{
 							machine_code = arr_opcode[i].machine_code;
+							write_to_file(machine_code, object_code);
 						}
 						break;
 					case 1:
+						if(arr_opcode[i].base_register == 0){
+							int register_index = value_of_register(register_operand[0], DESTINATION_REGISTER);
+							machine_code = arr_opcode[i].machine_code;
+							machine_code += arr_destination_register[register_index].machine_code;
+						}else{
+							int register_index = value_of_register(register_operand[0], BASE_REGISTER);
+							machine_code = arr_opcode[i].machine_code;
+							machine_code += arr_base_register[register_index].machine_code;
+						}
 						break;
 					case 2:
+						
 						break;
 					case 3:
 						break;
@@ -294,7 +316,18 @@ void convert_to_machine(FILE *input_assembly_file, FILE *object_code){
 }
 
 void print_bits(short machine_code){
-	
+	for(int i = 1 << 31; i > 0; i = i/2){
+		(machine_code & i) ? printf("1"):printf("0");
+	}
+}
+
+void write_to_file(short machine_code, FILE *output_file){
+	char *data = (char *)malloc(sizeof(char)*50);
+	data[0] = '0';
+	data[1] = 'x';
+	sprintf(&data[2],"%hX",machine_code);
+	fprintf(output_file, "%s", data);
+	free(data);
 }
 
 void add_label_to_table(char *label){
@@ -356,7 +389,9 @@ int is_register_operand(char *token){
 }
 
 int value_of_register(char *token, int register_type){
-
+	int index = strtol(token[1],NULL,0);
+	printf("register index: %s\n", index);
+	return index;
 }
 
 int is_immediate_operand(char *token){
