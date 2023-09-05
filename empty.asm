@@ -1,4 +1,4 @@
 .ORIG x3000
-REt
-rti
+;this is a comment
+hello ldw r0 r1 #5
 .END

@@ -4,6 +4,8 @@
 #include <ctype.h>
 #include <limits.h>
 
+#define false 0
+#define true 1
 #define MAX_INSTRUCTION_LENGTH 255
 #define LEN_OPCODE 4
 #define MAX_REGISTER_COUNT 8
@@ -27,9 +29,6 @@ int current_table_index = 0;
 table_entry symbol_table[MAX_SYMBOL];
 
 //enumerations related to the parsing, pseudo-ops, and type of registers used in the instruction processed, respectively
-enum status{
-	DONE, INVALID_LABEL, INVALID_OPCODE, INVALID_OPERAND, INVALID_PSEUDO_OP, EMPTY_FILE, TRUE, FALSE
-};
 enum pseudo_op{
 	ORIG, FILL, END
 };
@@ -120,7 +119,7 @@ const char* list_of_opcode[] = {
 };
 
 const char* list_of_pseudo_op[3] = {
-	".fill",".end",".orig"
+	".orig",".fill",".end"
 };
 
 int main(int argc, char **argv);
@@ -129,13 +128,21 @@ void parser_for_labels(FILE *input_assembly_file);
 
 void convert_to_machine(FILE *input_assembly_file, FILE *object_code);
 
+void print_bits(short machine_code);
+
 void write_to_file(FILE *output_file);
 
 void add_label_to_table(char *label);
 
-void set_start_address(char *instruction);
+void set_start_address(char *token);
 
-int which_opcode(char *token);
+int type_of_opcode(char *token);
+
+int type_of_pseudo_op(char *token);
+
+int value_of_register(char *token, int register_type);
+
+int value_of_operand(char *token);
 
 int check_alphanumeric(char *token);
 
@@ -180,18 +187,124 @@ int main(int argc, char **argv){
 }
 
 void parser_for_labels(FILE *input_assembly_file){
+	char *instruction = (char *)malloc(sizeof(char)*MAX_INSTRUCTION_LENGTH);
+	char *token = NULL;
+	while(fgets(instruction,MAX_INSTRUCTION_LENGTH,input_assembly_file)!=NULL){
+		for(int i = 0; i < strlen(instruction); i++){
+			instruction[i] = tolower(instruction[i]);
+		}
+		token = strtok(instruction, "\t\n ,");
+		//reached end of assembly
+		if(is_pseudo_op(token)== true){
+			int pseudo = type_of_pseudo_op(token);
+			if(pseudo == END){
+				break;
+			}
+		}
+		while(token!=NULL){
+			//skip all comments
+			if(strncmp(token,";",1)==0){
+				break;
+			}
+			if(is_pseudo_op(token) == true){
+				int pseudo_op = type_of_pseudo_op(token);
+				if(pseudo_op == ORIG){
+					token = strtok(NULL, "\t\n ,");
+					set_start_address(token);
+				}
+			}
+			if(is_pseudo_op(token) == false && is_opcode(token) == false && is_register_operand(token) == false && is_immediate_operand(token) == false){
+				add_label_to_table(token);
 
+			}
+			if(is_opcode(token) == true){
+				current_address = current_address + 2;
+			}
+			token = strtok(NULL,"\t\n ,");
+		}
+	}
+	free(instruction);
+}
+
+void convert_to_machine(FILE *input_assembly_file, FILE *object_code){	
+	char *instruction = (char *)malloc(sizeof(char)*MAX_INSTRUCTION_LENGTH);
+	char *token = NULL;
+	int opcode_index = 0;
+	char *opcode_string = (char *)malloc(sizeof(char)*MAX_INSTRUCTION_LENGTH);
+	int num_registers = 0;
+	char *register_operand[3];
+	int operand = false;
+	char *operand_string = (char *)malloc(MAX_INSTRUCTION_LENGTH);
+	while(fgets(instruction,MAX_INSTRUCTION_LENGTH,input_assembly_file)!=NULL){
+		for(int i = 0; i < strlen(instruction); i++){
+			instruction[i] = tolower(instruction[i]);
+		}
+		token = strtok(instruction, "\t\n ,");
+		//reached end of assembly
+		if(is_pseudo_op(token)== true){
+			int pseudo = type_of_pseudo_op(token);
+			if(pseudo == END){
+				break;
+			}			
+		}
+		while(token!=NULL){
+			//skip all comments
+			if(strncmp(token,";",1)==0){
+				break;
+			}
+			if(is_opcode(token)==true){
+				opcode_index = type_of_opcode(token);
+				opcode_string = strcpy(opcode_string, token);
+			}
+			if(is_register_operand(token)==true){
+				register_operand[num_registers] = token;
+				num_registers++;
+			}
+			if(is_immediate_operand(token)==true){
+				operand_string = strcpy(operand_string, token);
+				operand = true;
+			}
+			token = strtok(NULL, "\t\n ,");
+		}
+		short machine_code = 0;
+		for(int i = 0; i < NUM_OPCODE; i++){
+			if(strcmp(opcode_string,arr_opcode[i].opcode)==0 && num_registers == arr_opcode[i].num_registers){
+				switch(num_registers){
+					case 0:
+						if(operand){
+							int value = value_of_operand(operand_string);
+							machine_code = arr_opcode[i].machine_code + value;
+						}else{
+							machine_code = arr_opcode[i].machine_code;
+						}
+						break;
+					case 1:
+						break;
+					case 2:
+						break;
+					case 3:
+						break;
+				}
+			}
+		}	
+	}
+	free(instruction);
+	free(opcode_string);
+	free(operand_string);
+}
+
+void print_bits(short machine_code){
+	
 }
 
 void add_label_to_table(char *label){
-
+	symbol_table[current_table_index].address = current_address;
+	strcpy(symbol_table[current_table_index].label, label);
 }
 
-void set_start_address(char *instruction){
-
-}
-int which_opcode(char *token){
-
+void set_start_address(char *token){
+	starting_address = value_of_operand(token);
+	current_address = starting_address;
 }
 
 int check_alphanumeric(char *token){
@@ -199,21 +312,95 @@ int check_alphanumeric(char *token){
 }
 
 char * prepend_zero(char *buffer, char *token){
-
+	buffer[0] = '0';
+	buffer++;
+	buffer = strcpy(buffer,token);
+	buffer--;
+	return buffer;
 }
 
 int is_opcode(char *token){
+	for(int i = 0; i < NUM_OPCODE; i++){
+		if(strcmp(token,arr_opcode[i].opcode)==0){
+			return true;
+		}
+	}
+	return false;
+}
 
+int type_of_opcode(char *token){
+	for(int i = 0; i < NUM_OPCODE; i++){
+		if(strcmp(token,arr_opcode[i].opcode)==0){
+			return i;
+		}
+	}
+	//input should always be an actual opcode
+	return false;
 }
 
 int is_register_operand(char *token){
+	//R + register number + null terminator = 3 bytes
+	char *register_operand = (char *)malloc(sizeof(char)*3);
+	register_operand[0] = 'r';
+	int is_register = false;
+	// printf("token register: %s\n", token);
+	for(int i = 0; i < 8; i++){
+		sprintf(&register_operand[1], "%d", i);
+		if(strcmp(token, register_operand)==0){		
+			// printf("matching register: %s\n", register_operand);
+			is_register = true;
+		}
+	}
+	free(register_operand);
+	return is_register;
+}
+
+int value_of_register(char *token, int register_type){
 
 }
 
 int is_immediate_operand(char *token){
+	if(strncmp(token,"#",1)==0 || strncmp(token,"x",1)==0){
+		return true;
+	}
+	return false;
+}
 
+int value_of_operand(char *token){
+	char *buffer = (char *)malloc((strlen(token)+1)*sizeof(char));
+	short value = 0;
+	if(strncmp(token,"#",1)==0){
+		value = strtol(token,NULL,0);
+	}
+	if(strncmp(token,"x",1)==0){
+		buffer = prepend_zero(buffer, token);
+		value = strtol(buffer, NULL, 16);
+	}
+	free(buffer);
+	// printf("immediate value: %d\n", value);
+	return value;
 }
 
 int is_pseudo_op(char *token){
-	
+	for(int i = 0; i < NUM_PSEUDO_OPS; i++){
+		if(strcmp(token,list_of_pseudo_op[i])==0){
+			return true;
+		}
+	}	
+	return false;
+}
+
+int type_of_pseudo_op(char *token){
+	int index = 0;
+	for(int i = 0; i < NUM_PSEUDO_OPS; i++){
+		if(strcmp(token, list_of_pseudo_op[i])==0){
+			index = i;
+		}
+	}
+	//for readability purposes
+	for(int i = ORIG; i <= END; i++){
+		if(index == i){	
+			return i;
+		}
+	}
 }
