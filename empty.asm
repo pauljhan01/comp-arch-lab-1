@@ -1,3 +1,4 @@
-.ORIG x3000
-ldw r1 r0 #-10
+.ORIG #4096
+.fill x000A
+ldw r0 r7 #-2
 .END
