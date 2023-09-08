@@ -1,9 +1,12 @@
+/*
+	Name 1: Paul Han
+	UTEID 1: pjh2235
+*/
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
 #include <limits.h>
-#include <math.h>
 
 #define false 0
 #define true 1
@@ -92,7 +95,7 @@ typedef struct{
 
 const opcode arr_opcode[] = {
 	{"brn",0b0000100000000000, 0, 0, 9},{"brz",0b0000010000000000, 0, 0, 9},{"brp",0b0000001000000000, 0, 0, 9},{"brnz",0b0000110000000000, 0, 0, 9},
-	{"brzp",0b0000011000000000, 0, 0, 9},{"brnp",0b0001010000000000, 0, 0, 9},{"br",0b0000111000000000, 0, 0, 9},{"brnzp",0b0000111000000000, 0, 0 ,9},
+	{"brzp",0b0000011000000000, 0, 0, 9},{"brnp",0b0000101000000000, 0, 0, 9},{"br",0b0000111000000000, 0, 0, 9},{"brnzp",0b0000111000000000, 0, 0 ,9},
 	{"add",0b0001000000000000, 3, 0, 0},{"add",0b0001000000100000, 2, 0, 5},		
 	{"and",0b0101000000000000, 3, 0, 0},{"and",0b0101000000100000, 2, 0, 5},	
 	{"jmp",0b1100000000000000, 1, 1, 0},	
@@ -103,10 +106,10 @@ const opcode arr_opcode[] = {
 	{"ret",0b1100000111000000, 0, 0, 0},	
 	{"rti",0b1000000000000000, 0, 0, 0},	
 	{"lshf",0b1101000000000000, 2, 0, 4},
-	{"rshfl",0b1101000000010011, 2, 0, 4},
+	{"rshfl",0b1101000000010000, 2, 0, 4},
 	{"rshfa",0b1101000000110000, 2, 0, 4},
-	{"stb",0b0011000000110000, 2, 1, 6},	
-	{"stw",0b0111000000110000, 2, 1, 6},
+	{"stb",0b0011000000000000, 2, 1, 6},	
+	{"stw",0b0111000000000000, 2, 1, 6},
 	{"trap",0b1111000000000000, 0, 0, 8},
 	{"xor",0b1001000000000000, 3, 0, 0},
 	{"xor",0b1001000000100000, 2, 0, 5},	
@@ -195,18 +198,13 @@ int main(int argc, char **argv){
 void parser_for_labels(FILE *input_assembly_file){
 	char *instruction = (char *)malloc(sizeof(char)*MAX_INSTRUCTION_LENGTH);
 	char *token = NULL;
-	while(fgets(instruction,MAX_INSTRUCTION_LENGTH,input_assembly_file)!=NULL){
+	int end = false;
+	while(fgets(instruction,MAX_INSTRUCTION_LENGTH,input_assembly_file)!=NULL || end == false){
 		for(int i = 0; i < strlen(instruction); i++){
 			instruction[i] = tolower(instruction[i]);
 		}
 		token = strtok(instruction, "\t\n ,");
 		//reached end of assembly
-		if(is_pseudo_op(token)== true){
-			int pseudo = type_of_pseudo_op(token);
-			if(pseudo == END){
-				break;
-			}
-		}
 		while(token!=NULL){
 			//skip all comments
 			if(strncmp(token,";",1)==0){
@@ -217,6 +215,10 @@ void parser_for_labels(FILE *input_assembly_file){
 				if(pseudo_op == ORIG){
 					token = strtok(NULL, "\t\n ,");
 					set_start_address(token);
+				}
+				if(pseudo_op == END){
+					end = true;
+					break;
 				}
 			}
 			if(is_pseudo_op(token) == false && is_opcode(token) == false && is_register_operand(token) == false && is_immediate_operand(token) == false){
@@ -252,27 +254,25 @@ void convert_to_machine(FILE *input_assembly_file, FILE *object_code){
 	int operand = false;
 	char *operand_string = (char *)malloc(MAX_INSTRUCTION_LENGTH);
 	current_address = starting_address;
-	int process_instruction = true;
-	while(fgets(instruction,MAX_INSTRUCTION_LENGTH,input_assembly_file)!=NULL){
+	int process_rest_of_instruction = true;
+	int num_operands = 0;
+	int end = false;
+	while(fgets(instruction,MAX_INSTRUCTION_LENGTH,input_assembly_file)!=NULL || end == false){
 		operand = false;
 		num_registers = 0;
+		num_operands = 0;
 		for(int i = 0; i < strlen(instruction); i++){
 			instruction[i] = tolower(instruction[i]);
 		}
 		token = strtok(instruction, "\t\n ,");
 		//reached end of assembly
-		if(is_pseudo_op(token)== true){
-			int pseudo = type_of_pseudo_op(token);
-			if(pseudo == END){
-				break;
-			}			
-		}
 		while(token!=NULL){
 			//skip all comments
+			process_rest_of_instruction = true;
 			if(strncmp(token,";",1)==0){
-				opcode_string = strcpy(opcode_string, token);
 				break;
 			}
+			num_operands++;
 			if(is_opcode(token)==true){
 				opcode_index = type_of_opcode(token);
 				opcode_string = strcpy(opcode_string, token);
@@ -298,90 +298,117 @@ void convert_to_machine(FILE *input_assembly_file, FILE *object_code){
 					short value = value_of_operand(operand);
 					write_to_file(value, object_code);	
 				}
-			}
-			if(is_opcode(token) == false && is_pseudo_op(token) == false && is_register_operand(token) == false && is_immediate_operand(token) == false){
-				char *next_operand = strtok(NULL,"\t\n ,");
-				if(next_operand == NULL || strncmp(next_operand,";",1)==0){
-					int offset = find_offset_of_label(token);
-					sprintf(operand_string, "#%d", offset);
-					operand = true;
+				if(pseudo == END){
+					num_operands = 0;
+					end = true;
 					break;
 				}
 			}
+			if(is_opcode(token) == false && is_pseudo_op(token) == false && is_register_operand(token) == false && is_immediate_operand(token) == false){
+				char *label = token;
+				token = strtok(NULL,"\t\n ,");
+				if(token == NULL || strncmp(token,";",1)==0){
+					int offset = find_offset_of_label(label);
+					sprintf(operand_string, "#%d", offset);
+					operand = true;
+					break;
+				}else{
+					if(is_pseudo_op(token)==true){
+						int pseudo = type_of_pseudo_op(token);
+						if(pseudo == FILL){
+							char *operand = strtok(NULL, "\t\n ,");
+							short value = value_of_operand(operand);
+							write_to_file(value, object_code);	
+							current_address = current_address + 1;
+							num_operands = 0;
+						}
+					}
+					if(is_opcode(token)==true){
+						opcode_index = type_of_opcode(token);
+						opcode_string = strcpy(opcode_string, token);
+						process_rest_of_instruction = false;
+					}
+					
+				}
 			//TODO
-			token = strtok(NULL, "\t\n ,");
+			}	
+			if(process_rest_of_instruction == true){
+				token = strtok(NULL, "\t\n ,");
+			}
 		}
 		unsigned short machine_code = 0;
-		for(int i = 0; i < NUM_OPCODE; i++){
-			if(strcmp(opcode_string,arr_opcode[i].opcode)==0 && num_registers == arr_opcode[i].num_registers){
-				switch(num_registers){
-					case 0:{
-						if(operand == true){
-							int value = value_of_operand(operand_string);
-							machine_code = arr_opcode[i].machine_code;
-							short value_operand = convert_to_binary(value, arr_opcode[i].num_bits_offset_immediate);
-							machine_code |= value_operand;
-						}else{
-							machine_code = arr_opcode[i].machine_code;
-						}	
-						write_to_file(machine_code, object_code);
-						break;
-					}
-					case 1:{
-						//TODO: fix value_of_register and machine code conversions for negative immediate values
-						if(arr_opcode[i].base_register == 0){
-							int register_index = value_of_register(register_operand[0], DESTINATION_REGISTER);
-							machine_code = arr_opcode[i].machine_code;
-							machine_code |= arr_destination_register[register_index].machine_code;
+		if(num_operands > 0){
+			for(int i = 0; i < NUM_OPCODE; i++){
+				if(strcmp(opcode_string,arr_opcode[i].opcode)==0 && num_registers == arr_opcode[i].num_registers){
+					switch(num_registers){
+						case 0:{
 							if(operand == true){
 								int value = value_of_operand(operand_string);
+								machine_code = arr_opcode[i].machine_code;
 								short value_operand = convert_to_binary(value, arr_opcode[i].num_bits_offset_immediate);
-								machine_code |= value;
+								machine_code |= value_operand;
+							}else{
+								machine_code = arr_opcode[i].machine_code;
 							}	
-						}else{
-							int register_index = value_of_register(register_operand[0], BASE_REGISTER);
+							write_to_file(machine_code, object_code);
+							break;
+						}
+						case 1:{
+							//TODO: fix value_of_register and machine code conversions for negative immediate values
+							if(arr_opcode[i].base_register == 0){
+								int register_index = value_of_register(register_operand[0], DESTINATION_REGISTER);
+								machine_code = arr_opcode[i].machine_code;
+								machine_code |= arr_destination_register[register_index].machine_code;
+								if(operand == true){
+									int value = value_of_operand(operand_string);
+									short value_operand = convert_to_binary(value, arr_opcode[i].num_bits_offset_immediate);
+									machine_code |= value;
+								}	
+							}else{
+								int register_index = value_of_register(register_operand[0], BASE_REGISTER);
+								machine_code = arr_opcode[i].machine_code;
+								machine_code |= arr_base_register[register_index].machine_code;
+							}
+							write_to_file(machine_code, object_code);
+							break;
+						}
+						case 2:{
+							int register_index = 0;
+							register_index = value_of_register(register_operand[0], DESTINATION_REGISTER);
 							machine_code = arr_opcode[i].machine_code;
-							machine_code |= arr_base_register[register_index].machine_code;
-						}
-						write_to_file(machine_code, object_code);
-						break;
-					}
-					case 2:{
-						int register_index = 0;
-						register_index = value_of_register(register_operand[0], DESTINATION_REGISTER);
-						machine_code = arr_opcode[i].machine_code;
-						machine_code |= arr_destination_register[register_index].machine_code;
-						if(arr_opcode[i].base_register == 1){
-							register_index = value_of_register(register_operand[1], BASE_REGISTER);
-							machine_code |= arr_base_register[register_index].machine_code;
-						}
-						else{
-							register_index = value_of_register(register_operand[1], SOURCE_REGISTER1);
-							machine_code |= arr_source_register1[register_index].machine_code;							
+							machine_code |= arr_destination_register[register_index].machine_code;
+							if(arr_opcode[i].base_register == 1){
+								register_index = value_of_register(register_operand[1], BASE_REGISTER);
+								machine_code |= arr_base_register[register_index].machine_code;
+							}
+							else{
+								register_index = value_of_register(register_operand[1], SOURCE_REGISTER1);
+								machine_code |= arr_source_register1[register_index].machine_code;							
+							}	
+							int value = value_of_operand(operand_string);
+							short value_operand = convert_to_binary(value, arr_opcode[i].num_bits_offset_immediate);
+							machine_code |= value_operand;
+							write_to_file(machine_code, object_code);
+							break;
 						}	
-						int value = value_of_operand(operand_string);
-						short value_operand = convert_to_binary(value, arr_opcode[i].num_bits_offset_immediate);
-						machine_code |= value_operand;
-						write_to_file(machine_code, object_code);
-						break;
-					}	
-					case 3:{
-						int source_register1_index = 0;
-						int source_register2_index = 0;
-						int destination_register_index = 0;
-						source_register1_index = value_of_register(register_operand[1], SOURCE_REGISTER1);
-						source_register2_index = value_of_register(register_operand[2], SOURCE_REGISTER2);
-						destination_register_index = value_of_register(register_operand[0], DESTINATION_REGISTER);
-						machine_code |= arr_source_register1[source_register1_index].machine_code;
-						machine_code |= arr_source_register2[source_register2_index].machine_code;
-						machine_code |= arr_destination_register[destination_register_index].machine_code;
-						machine_code |= arr_opcode[i].machine_code;
-						write_to_file(machine_code, object_code);
-						break;
+						case 3:{
+							int source_register1_index = 0;
+							int source_register2_index = 0;
+							int destination_register_index = 0;
+							source_register1_index = value_of_register(register_operand[1], SOURCE_REGISTER1);
+							source_register2_index = value_of_register(register_operand[2], SOURCE_REGISTER2);
+							destination_register_index = value_of_register(register_operand[0], DESTINATION_REGISTER);
+							machine_code |= arr_source_register1[source_register1_index].machine_code;
+							machine_code |= arr_source_register2[source_register2_index].machine_code;
+							machine_code |= arr_destination_register[destination_register_index].machine_code;
+							machine_code |= arr_opcode[i].machine_code;
+							write_to_file(machine_code, object_code);
+							break;
+						}
 					}
 				}
-			}
-		}	
+			}	
+		}
 	}
 	free(instruction);
 	free(opcode_string);
